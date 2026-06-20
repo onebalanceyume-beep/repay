@@ -230,6 +230,8 @@ input,select{font-family:inherit;font-size:1rem;}
         <div class="rn" id="ldRuleN"></div>
       </div>
 
+      <div id="ldStart" style="display:flex;gap:10px;align-items:center;background:var(--blue-l);border-radius:13px;padding:11px 14px;margin:0 0 4px;"></div>
+
       <div class="quick" id="ldQuick">
         <button class="qbtn q-red" onclick="openPay('extra')"><span class="qi">⚡</span>臨時返済</button>
         <button class="qbtn q-blue" onclick="openPay('month')"><span class="qi">＋</span>返済を記録</button>
@@ -302,14 +304,7 @@ function seed(){
   return {
     lenders:[{
       id:id(),name:'Aさん',total:12000000,method:'link',fixed:50000,rate:30,
-      payments:[
-        {id:id(),ym:'2026-07',amount:50000,type:'fix',memo:'固定返済'},
-        {id:id(),ym:'2026-08',amount:50000,type:'fix',memo:'固定返済'},
-        {id:id(),ym:'2026-09',amount:50000,type:'fix',memo:'固定返済'},
-        {id:id(),ym:'2026-10',amount:50000,type:'fix',memo:'固定返済'},
-        {id:id(),ym:'2026-11',amount:50000,type:'fix',memo:'固定返済'},
-        {id:id(),ym:'2026-12',amount:50000,type:'fix',memo:'固定返済'},
-      ]
+      payments:[]
     }],
     biz:[
       {ym:'2026-07',sales:0},{ym:'2026-08',sales:50000},{ym:'2026-09',sales:120000},
@@ -327,6 +322,8 @@ const paid=l=>l.payments.reduce((s,p)=>s+(+p.amount||0),0);
 const remain=l=>Math.max(0,l.total-paid(l));
 const pct=l=>l.total>0?Math.min(100,paid(l)/l.total*100):0;
 const ymLabel=ym=>{const[y,m]=ym.split('-');return y+'/'+(+m);};
+const monthOf=d=>d?d.slice(0,7):'';
+const dateFull=d=>{if(!d)return'';const p=d.split('-');return p[0]+'/'+(+p[1])+'/'+(+p[2]);};
 const AV=['var(--green)','var(--blue)','var(--red)','#7C6BD1','#E08A2B'];
 
 let curLender=null, showMode=false;
@@ -405,23 +402,34 @@ function renderDetail(){
     document.getElementById('ldEstL').textContent='完済予定';document.getElementById('ldEstV').textContent='返済を記録すると目安が出ます';
   }
 
+  // 返済スタート表示
+  const dates=l.payments.map(p=>p.date).filter(Boolean).sort();
+  const startEl=document.getElementById('ldStart');
+  if(!dates.length){
+    startEl.innerHTML='<span style="font-size:1.3rem">🚩</span><div><div style="font-size:.82rem;font-weight:800;color:var(--blue-d)">まだ返済前</div><div style="font-size:.72rem;color:var(--blue);margin-top:2px">最初の返済を記録すると、ここからスタートです</div></div>';
+  }else{
+    const s=dates[0],sd=new Date(s),nd=new Date();
+    let mc=(nd.getFullYear()-sd.getFullYear())*12+(nd.getMonth()-sd.getMonth())+1;if(mc<1)mc=1;
+    startEl.innerHTML=`<span style="font-size:1.3rem">🚩</span><div><div style="font-size:.82rem;font-weight:800;color:var(--blue-d)">返済スタート：${dateFull(s)}</div><div style="font-size:.72rem;color:var(--blue);margin-top:2px">返済 ${mc}ヶ月目</div></div>`;
+  }
+
   // plan vs actual (last up to 6 records)
-  const rows=[...l.payments].sort((a,b)=>a.ym<b.ym?-1:1).slice(-6);
+  const rows=[...l.payments].sort((a,b)=>(a.date||'')<(b.date||'')?-1:1).slice(-6);
   const plan=document.getElementById('ldPlan');
   if(!rows.length){plan.innerHTML='<div class="empty">まだ返済記録がありません。</div>';}
   else{
     let h='<div class="th"><span class="c-m">月</span><span class="c-p">予定</span><span class="c-a">実績</span><span class="c-j">判定</span></div>';
     rows.forEach(p=>{
       let planned=l.fixed;
-      if(l.method==='link'){const b=data.biz.find(x=>x.ym===p.ym);const sales=b?b.sales:0;planned=l.fixed+Math.round(sales*l.rate/100);}
+      if(l.method==='link'){const b=data.biz.find(x=>x.ym===monthOf(p.date));const sales=b?b.sales:0;planned=l.fixed+Math.round(sales*l.rate/100);}
       const okFlag=(+p.amount)>=planned;
-      h+=`<div class="tr"><span class="c-m">${ymLabel(p.ym)}</span><span class="c-p">${yen(planned)}</span><span class="c-a">${yen(p.amount)}</span><span class="c-j ${okFlag?'ok':'miss'}">${okFlag?'✓':'△'}</span></div>`;
+      h+=`<div class="tr"><span class="c-m">${ymLabel(monthOf(p.date))}</span><span class="c-p">${yen(planned)}</span><span class="c-a">${yen(p.amount)}</span><span class="c-j ${okFlag?'ok':'miss'}">${okFlag?'✓':'△'}</span></div>`;
     });
     plan.innerHTML=h;
   }
 
   // history
-  const hist=[...l.payments].sort((a,b)=>a.ym<b.ym?1:-1);
+  const hist=[...l.payments].sort((a,b)=>(a.date||'')<(b.date||'')?1:-1);
   const hd=document.getElementById('ldHist');
   if(!hist.length){hd.innerHTML='<div class="empty">記録なし</div>';}
   else{
@@ -429,7 +437,7 @@ function renderDetail(){
       const ex=p.type==='extra';
       return `<div class="hrow">
         <span class="hbadge ${ex?'hb-extra':'hb-fix'}">${ex?'⚡':'↓'}</span>
-        <div class="hm"><div class="h1">${ymLabel(p.ym)} ${esc(p.memo||(ex?'臨時返済':'返済'))}</div><div class="h2">${ex?'臨時':'定例'}</div></div>
+        <div class="hm"><div class="h1">${dateFull(p.date)} ${esc(p.memo||(ex?'臨時返済':'返済'))}</div><div class="h2">${ex?'臨時':'定例'}</div></div>
         <span class="ha ${ex?'extra':'fix'}">−${yen(p.amount)}</span>
         ${showMode?'':`<button class="hdots" onclick="openPayEdit('${p.id}')">⋮</button>`}
       </div>`;
@@ -524,8 +532,8 @@ function delLender(){
 
 let pForm={};
 function openPay(kind){
-  const ym=new Date().toISOString().slice(0,7);
-  pForm={id:null,ym,amount:'',type:kind==='extra'?'extra':'fix',memo:''};
+  const today=new Date().toISOString().slice(0,10);
+  pForm={id:null,date:today,amount:'',type:kind==='extra'?'extra':'fix',memo:''};
   if(kind!=='extra'){const l=data.lenders.find(x=>x.id===curLender);pForm.amount=l?l.fixed:'';}
   renderPayForm(kind==='extra'?'臨時返済を記録':'返済を記録');
 }
@@ -537,7 +545,7 @@ function renderPayForm(title){
   const p=pForm,ex=p.type==='extra';
   openModal(`
     <h3>${title}</h3>
-    <div class="fld"><label>対象の年月</label><input id="p-ym" type="month" value="${p.ym}"></div>
+    <div class="fld"><label>返済した日</label><input id="p-date" type="date" value="${p.date||''}"><div class="hint">ボタンを押した日が入ります。変更もできます</div></div>
     <div class="fld"><label>返済額</label><input id="p-amt" type="number" inputmode="numeric" value="${p.amount||''}" placeholder="例：50000"></div>
     <div class="fld"><label>種類</label>
       <div class="seg">
@@ -556,15 +564,16 @@ function renderPayForm(title){
 function setPType(t){capturePForm();pForm.type=t;renderPayForm(pForm.id?'返済を編集':(t==='extra'?'臨時返済を記録':'返済を記録'));}
 function capturePForm(){
   const g=i=>document.getElementById(i);
-  if(g('p-ym'))pForm.ym=g('p-ym').value;
+  if(g('p-date'))pForm.date=g('p-date').value;
   if(g('p-amt'))pForm.amount=g('p-amt').value;
   if(g('p-memo'))pForm.memo=g('p-memo').value;
 }
 function savePay(){
   capturePForm();const p=pForm;
+  if(!p.date){alert('返済した日を入れてください');return;}
   if(!p.amount||+p.amount<=0){alert('返済額を入力してください');return;}
   const l=data.lenders.find(x=>x.id===curLender);
-  const obj={ym:p.ym,amount:+p.amount,type:p.type,memo:p.memo||(p.type==='extra'?'臨時返済':'返済')};
+  const obj={date:p.date,amount:+p.amount,type:p.type,memo:p.memo||(p.type==='extra'?'臨時返済':'返済')};
   if(p.id){Object.assign(l.payments.find(x=>x.id===p.id),obj);}
   else{l.payments.push({id:id(),...obj});}
   save();closeModal();renderDetail();
@@ -585,10 +594,42 @@ function openSettings(){
       <div class="hint">ホームでランダムに表示されます</div>
     </div>
     <div class="btn-row"><button class="btn btn-main" onclick="saveCheers()">保存</button></div>
+    <div class="fld" style="margin-top:18px"><label>データのバックアップ</label>
+      <div class="btn-row"><button class="btn btn-ghost" onclick="exportData()">書き出す</button><button class="btn btn-ghost" onclick="importData()">読み込む</button></div>
+      <div class="hint">機種変更やデータ消失に備えて、ときどき書き出して保存しておくと安心です</div>
+    </div>
     <div class="btn-row"><button class="btn btn-ghost" onclick="closeModal()">とじる</button></div>
     <div class="btn-row"><button class="btn btn-del" onclick="resetAll()">すべてのデータを初期化</button></div>
     <div class="hint" style="text-align:center">${Store.ok?'データはこの端末に保存されています':'※プレビュー環境では保存されません（ダウンロード後は保存されます）'}</div>
   `);
+}
+function exportData(){
+  try{
+    const blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'});
+    const url=URL.createObjectURL(blob);
+    const a=document.createElement('a');
+    a.href=url;a.download='返済プラン_backup_'+new Date().toISOString().slice(0,10)+'.json';
+    document.body.appendChild(a);a.click();a.remove();URL.revokeObjectURL(url);
+  }catch(e){alert('書き出しに失敗しました');}
+}
+function importData(){
+  openModal(`
+    <h3>バックアップを読み込む</h3>
+    <div class="fld"><label>バックアップのJSONを貼り付け</label>
+      <textarea id="imp" style="width:100%;min-height:140px;padding:11px 12px;border:1px solid var(--line);border-radius:11px;background:#fafcfb;font-family:inherit;font-size:.9rem;resize:vertical" placeholder="書き出したJSONをここに貼り付け"></textarea>
+      <div class="hint">今のデータは上書きされます</div>
+    </div>
+    <div class="btn-row"><button class="btn btn-main" onclick="doImport()">復元する</button></div>
+    <div class="btn-row"><button class="btn btn-ghost" onclick="openSettings()">もどる</button></div>
+  `);
+}
+function doImport(){
+  try{
+    const o=JSON.parse(document.getElementById('imp').value);
+    if(!o||!Array.isArray(o.lenders))throw 0;
+    data=o;save();closeModal();renderHome();renderBiz();go('home');
+    setTimeout(()=>alert('復元しました'),50);
+  }catch(e){alert('JSONが正しくありません。書き出したファイルの中身をそのまま貼り付けてください');}
 }
 function saveCheers(){
   const t=document.getElementById('s-cheers').value;
