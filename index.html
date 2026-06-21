@@ -311,6 +311,7 @@ function seed(){
       {ym:'2026-10',sales:200000},{ym:'2026-11',sales:300000},{ym:'2026-12',sales:400000}
     ],
     cheers:['人は出来ないことで悩まない'],
+    gasUrl:'',
   };
 }
 function id(){return Math.random().toString(36).slice(2,9);}
@@ -574,9 +575,19 @@ function savePay(){
   if(!p.amount||+p.amount<=0){alert('返済額を入力してください');return;}
   const l=data.lenders.find(x=>x.id===curLender);
   const obj={date:p.date,amount:+p.amount,type:p.type,memo:p.memo||(p.type==='extra'?'臨時返済':'返済')};
+  const isNew=!p.id;
   if(p.id){Object.assign(l.payments.find(x=>x.id===p.id),obj);}
   else{l.payments.push({id:id(),...obj});}
-  save();closeModal();renderDetail();
+  save();
+  if(isNew)syncToSheet({date:obj.date,lender:l.name,amount:obj.amount,type:(obj.type==='extra'?'臨時':'定例'),memo:obj.memo,remaining:remain(l)});
+  closeModal();renderDetail();
+}
+function syncToSheet(payload){
+  const url=(data.gasUrl||'').trim();
+  if(!url)return;
+  try{
+    fetch(url,{method:'POST',mode:'no-cors',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify(payload)});
+  }catch(e){}
 }
 function delPay(){
   if(!confirm('この記録を削除しますか？'))return;
@@ -593,7 +604,11 @@ function openSettings(){
       <textarea id="s-cheers" style="width:100%;min-height:110px;padding:11px 12px;border:1px solid var(--line);border-radius:11px;background:#fafcfb;font-family:inherit;font-size:1rem;resize:vertical">${esc((data.cheers||[]).join('\n'))}</textarea>
       <div class="hint">ホームでランダムに表示されます</div>
     </div>
-    <div class="btn-row"><button class="btn btn-main" onclick="saveCheers()">保存</button></div>
+    <div class="fld"><label>スプレッドシート連携URL（GAS）</label>
+      <input id="s-gas" value="${esc(data.gasUrl||'')}" placeholder="https://script.google.com/macros/s/.../exec">
+      <div class="hint">返済を記録すると、自動でスプレッドシートに1行追加されます</div>
+    </div>
+    <div class="btn-row"><button class="btn btn-main" onclick="saveCheers()">設定を保存</button></div>
     <div class="fld" style="margin-top:18px"><label>データのバックアップ</label>
       <div class="btn-row"><button class="btn btn-ghost" onclick="exportData()">書き出す</button><button class="btn btn-ghost" onclick="importData()">読み込む</button></div>
       <div class="hint">機種変更やデータ消失に備えて、ときどき書き出して保存しておくと安心です</div>
@@ -635,6 +650,7 @@ function saveCheers(){
   const t=document.getElementById('s-cheers').value;
   data.cheers=t.split('\n').map(s=>s.trim()).filter(Boolean);
   if(!data.cheers.length)data.cheers=['人は出来ないことで悩まない'];
+  const g=document.getElementById('s-gas');if(g)data.gasUrl=g.value.trim();
   save();closeModal();renderHome();
 }
 function resetAll(){
