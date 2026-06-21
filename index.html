@@ -232,6 +232,8 @@ input,select{font-family:inherit;font-size:1rem;}
 
       <div id="ldStart" style="display:flex;gap:10px;align-items:center;background:var(--blue-l);border-radius:13px;padding:11px 14px;margin:0 0 4px;"></div>
 
+      <div id="ldThisMonth" style="display:none;background:var(--red);border-radius:14px;padding:14px;margin:8px 0 4px;color:#fff;"></div>
+
       <div class="quick" id="ldQuick">
         <button class="qbtn q-red" onclick="openPay('extra')"><span class="qi">⚡</span>臨時返済</button>
         <button class="qbtn q-blue" onclick="openPay('month')"><span class="qi">＋</span>返済を記録</button>
@@ -311,11 +313,11 @@ function seed(){
       payments:[]
     }],
     biz:[
-      {ym:'2026-05',sales:0},{ym:'2026-06',sales:44820},{ym:'2026-07',sales:205020},
-      {ym:'2026-08',sales:130140},{ym:'2026-09',sales:44820},{ym:'2026-10',sales:44820},
-      {ym:'2026-11',sales:249840},{ym:'2026-12',sales:130140},{ym:'2027-01',sales:44820},
-      {ym:'2027-02',sales:44820},{ym:'2027-03',sales:205020},{ym:'2027-04',sales:130140},
-      {ym:'2027-05',sales:44820}
+      {ym:'2026-05',sales:0,actual:0},{ym:'2026-06',sales:44820,actual:0},{ym:'2026-07',sales:205020,actual:0},
+      {ym:'2026-08',sales:130140,actual:0},{ym:'2026-09',sales:44820,actual:0},{ym:'2026-10',sales:44820,actual:0},
+      {ym:'2026-11',sales:249840,actual:0},{ym:'2026-12',sales:130140,actual:0},{ym:'2027-01',sales:44820,actual:0},
+      {ym:'2027-02',sales:44820,actual:0},{ym:'2027-03',sales:205020,actual:0},{ym:'2027-04',sales:130140,actual:0},
+      {ym:'2027-05',sales:44820,actual:0}
     ],
     cheers:['人は出来ないことで悩まない'],
     gasUrl:'',
@@ -421,6 +423,22 @@ function renderDetail(){
     startEl.innerHTML=`<span style="font-size:1.3rem">🚩</span><div><div style="font-size:.82rem;font-weight:800;color:var(--blue-d)">返済スタート：${dateFull(s)}</div><div style="font-size:.72rem;color:var(--blue);margin-top:2px">返済 ${mc}ヶ月目</div></div>`;
   }
 
+  // 今月の振り込み予定（売上連動の借入先のみ）
+  const tmEl=document.getElementById('ldThisMonth');
+  if(l.method==='link'){
+    const nowYm=new Date().toISOString().slice(0,7);
+    const b=data.biz.find(x=>x.ym===nowYm);
+    if(b){
+      const isActual=(b.actual||0)>0;
+      const sales=isActual?b.actual:(b.sales||0);
+      const amt=Math.round(sales*l.rate/100)+l.fixed;
+      tmEl.style.display='block';
+      tmEl.innerHTML=`<div style="font-size:.78rem;opacity:.92;">今月の振り込み予定（${ymLabel(nowYm)}）</div>
+        <div style="font-size:1.7rem;font-weight:800;margin:4px 0;">¥${amt.toLocaleString('ja-JP')}</div>
+        <div style="font-size:.72rem;opacity:.92;">${isActual?'実績売上':'計画売上（実績は未入力）'} ¥${sales.toLocaleString('ja-JP')} × ${l.rate}% ＋ 固定¥${l.fixed.toLocaleString('ja-JP')}</div>`;
+    }else{ tmEl.style.display='none'; }
+  }else{ tmEl.style.display='none'; }
+
   // plan vs actual (last up to 6 records)
   const rows=[...l.payments].sort((a,b)=>(a.date||'')<(b.date||'')?-1:1).slice(-6);
   const plan=document.getElementById('ldPlan');
@@ -466,22 +484,37 @@ function updateShowBanner(){document.getElementById('showBanner').classList.togg
 
 /* ---------- BUSINESS ---------- */
 function renderBiz(){
-  const max=Math.max(1,...data.biz.map(b=>b.sales));
-  document.getElementById('bizChart').innerHTML=data.biz.map(b=>
-    `<div class="col"><div class="bb" style="height:${Math.max(3,b.sales/max*120)}px"></div><div class="cl">${ymLabel(b.ym)}</div></div>`
-  ).join('');
+  const max=Math.max(1,...data.biz.map(b=>Math.max(b.sales||0,b.actual||0)));
+  document.getElementById('bizChart').innerHTML=data.biz.map(b=>{
+    const plan=Math.max(3,(b.sales||0)/max*120);
+    const act=Math.max(0,(b.actual||0)/max*120);
+    return `<div class="col" style="flex-direction:row;gap:3px;align-items:flex-end;">
+      <div style="width:9px;height:${plan}px;background:var(--green-mid);border-radius:4px 4px 0 0;"></div>
+      ${b.actual>0?`<div style="width:9px;height:${act}px;background:var(--green);border-radius:4px 4px 0 0;"></div>`:''}
+      <div class="cl" style="position:absolute;bottom:-18px;">${ymLabel(b.ym)}</div></div>`;
+  }).join('');
   document.getElementById('bizInputs').innerHTML=data.biz.map((b,i)=>
-    `<div class="biz-input"><span class="bm">${ymLabel(b.ym)}</span>
-      <input type="number" inputmode="numeric" value="${b.sales}" onchange="setBiz(${i},this.value)" placeholder="売上">
-      <button class="hdots" onclick="delBiz(${i})">⋮</button></div>`
+    `<div style="padding:10px 0;border-bottom:1px solid var(--line);">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+        <span style="font-size:.85rem;font-weight:600;">${ymLabel(b.ym)}</span>
+        <button onclick="delBiz(${i})" style="color:var(--ink3);font-size:1.05rem;padding:2px 6px;">⋮</button>
+      </div>
+      <div style="display:flex;gap:8px;">
+        <div style="flex:1;"><div style="font-size:.68rem;color:var(--ink3);margin-bottom:3px;">計画売上</div>
+          <input type="number" inputmode="numeric" value="${b.sales||0}" onchange="setBiz(${i},this.value)" style="width:100%;padding:8px 9px;border:1px solid var(--line);border-radius:9px;text-align:right;font-size:.95rem;"></div>
+        <div style="flex:1;"><div style="font-size:.68rem;color:var(--red-d);margin-bottom:3px;">実績売上</div>
+          <input type="number" inputmode="numeric" value="${b.actual||0}" onchange="setBizActual(${i},this.value)" style="width:100%;padding:8px 9px;border:1px solid var(--red-l);border-radius:9px;text-align:right;font-size:.95rem;background:#FDF3F4;"></div>
+      </div>
+    </div>`
   ).join('');
 }
 function setBiz(i,v){data.biz[i].sales=+v||0;save();renderBiz();}
+function setBizActual(i,v){data.biz[i].actual=+v||0;save();renderBiz();}
 function delBiz(i){data.biz.splice(i,1);save();renderBiz();}
 function addBizMonth(){
   let ym='2027-01';
   if(data.biz.length){const last=data.biz[data.biz.length-1].ym;let[y,m]=last.split('-').map(Number);m++;if(m>12){m=1;y++;}ym=y+'-'+String(m).padStart(2,'0');}
-  data.biz.push({ym,sales:0});save();renderBiz();
+  data.biz.push({ym,sales:0,actual:0});save();renderBiz();
 }
 
 /* ---------- MODALS ---------- */
