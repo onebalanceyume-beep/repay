@@ -272,6 +272,10 @@ input,select{font-family:inherit;font-size:1rem;}
         <div class="rv">売上が伸びる → 返済の余力が増える → 早く返せる</div>
         <div class="rn">最低でも固定額は必ず返済、伸びた分は前倒しに回します</div>
       </div>
+
+      <button class="add" style="margin-top:14px; border-color:var(--green); color:var(--green-d);" onclick="syncForecast()">
+        <i class="ti ti-cloud-upload" style="font-size:18px; margin-right:4px;"></i>スプレッドシートに保存
+      </button>
     </div>
   </div>
 </div>
@@ -582,7 +586,7 @@ function savePay(){
   if(p.id){Object.assign(l.payments.find(x=>x.id===p.id),obj);}
   else{l.payments.push({id:id(),...obj});}
   save();
-  if(isNew)syncToSheet({date:obj.date,lender:l.name,amount:obj.amount,type:(obj.type==='extra'?'臨時':'定例'),memo:obj.memo,remaining:remain(l)});
+  if(isNew)syncToSheet({kind:'payment',date:obj.date,lender:l.name,amount:obj.amount,type:(obj.type==='extra'?'臨時':'定例'),memo:obj.memo,remaining:remain(l)});
   closeModal();renderDetail();
 }
 function syncToSheet(payload){
@@ -591,6 +595,11 @@ function syncToSheet(payload){
   try{
     fetch(url,{method:'POST',mode:'no-cors',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify(payload)});
   }catch(e){}
+}
+function syncForecast(){
+  if(!(data.gasUrl||'').trim()){alert('先に⚙設定で「スプレッドシート連携URL」を入れてください');return;}
+  syncToSheet({kind:'forecast',months:data.biz});
+  setTimeout(()=>alert('スプレッドシートに保存しました（「アプリ事業計画」シート）'),50);
 }
 function delPay(){
   if(!confirm('この記録を削除しますか？'))return;
